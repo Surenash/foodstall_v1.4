@@ -1,0 +1,99 @@
+Purpose: Defines the technical architecture, ensuring scalability, security, and performance for the Indian market.
+
+Section A: Tech Stack 
++1
+
+Frontend (User): React Native (Cross-platform) or Kotlin (Native Android - preferred for performance).
+
+Frontend (Owner): Progressive Web App (PWA) or Lightweight Android App (Kotlin).
+
+Backend: Node.js with NestJS (Scalable, efficient).
+
+Database: PostgreSQL with PostGIS extension (Crucial for geospatial queries/location data).
+
+Real-Time Engine: Socket.io or WebSockets (For live Open/Closed status updates).
+
+Infrastructure: AWS or Google Cloud (Mumbai Region for low latency).
+
+Mapping: Google Maps API or Mapbox (Cost-dependent).
+
+Section B: Backend Structure
+1. Database Schema (Simplified)
+
+Table: Users
+
+id (UUID)
+
+phone_number (String, Indexed)
+
+preferences (JSONB: Veg/NonVeg, Spice tolerance)
+
+Table: Stalls
+
+id (UUID)
+
+owner_id (FK)
+
+name (String)
+
+location (Geography Point - PostGIS)
+
+is_open (Boolean)
+
+last_status_update (Timestamp)
+
+hygiene_badges (JSONB: FSSAI, Owner_Declared)
+
+Table: Reviews
+
+id (UUID)
+
+stall_id (FK)
+
+user_id (FK)
+
+rating (Integer 1-5)
+
+
+hygiene_score (Integer 1-5) 
+
+tags (Array: "Gloves Used", "Clean Water")
+
+2. API Endpoints (Core)
+
+User API:
+
+GET /api/v1/stalls/nearby?lat=...&long=...&radius=1km (Fetches open stalls)
+
+GET /api/v1/stalls/:id (Details, Menu, Hygiene info)
+
+POST /api/v1/reviews (Submit rating + hygiene feedback)
+
+Owner API:
+
+POST /api/v1/owner/status (Body: { "isOpen": true, "location": {lat, long} })
+
+PUT /api/v1/owner/menu (Update items)
+
+POST /api/v1/owner/hygiene-proof (Upload image)
+
+Section C: Security Checklist Document
+Pre-Deployment Review:
+
+
+[ ] DPDPA Compliance: Ensure Privacy Policy is linked, and Consent Manager is active for Location Data .
+
+
+[ ] Data Minimization: Verify we are strictly collecting only necessary location data and not tracking users in background when app is closed.
+
+
+[ ] Authentication: Implement Rate Limiting on OTP login endpoints to prevent SMS flooding attacks.
+
+
+[ ] Input Sanitization: Validate all review text inputs to prevent XSS or Injection attacks.
+
+
+[ ] Encryption: Ensure SSL/TLS is active for all API calls; encrypt sensitive user data (phone numbers) at rest.
+
+
+[ ] Moderation Queue: Ensure hygiene-related photo uploads go to a moderation queue before going public to prevent abuse.

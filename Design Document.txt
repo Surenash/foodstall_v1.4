@@ -1,0 +1,37 @@
+Purpose: Defines the visual identity and UI standards to ensure the app is accessible, trustworthy, and localized.
+
+3.1 Design Principles
+
+Mobile-First & Lightweight: Optimized for lower-end Android devices and 2G/3G networks common in India.
++1
+
+
+High Contrast: UI must be visible outdoors in bright sunlight (for owners).
+
+
+Trust-Centric: Use of clean icons and badges (e.g., Green Shield for Hygiene) to convey safety.
+
+3.2 Visual Guidelines
+
+Color Palette: 
+
+Primary: #FF5733 (Vibrant Orange - appetizing, energetic).
+
+Secondary: #FFC300 (Yellow - highlights, warnings).
+
+Neutral: White backgrounds for readability, Dark Grey for text.
+
+Status Indicators: Bright Green for "OPEN", Grey for "CLOSED".
+
+Typography:
+
+
+Font Family: "Inter" or "Roboto" (Google Fonts) - highly readable and supports multiple Indian scripts.
+
+
+Sizing: Large text for Owner App buttons to accommodate varied literacy levels.
+
+3.3 UI References (Mental Sandbox)
+Inspiration: Look at Swiggy Delivery Partner App for simple toggle interfaces, and Google Maps for clear POI markers.
+
+Hygiene UI: Similar to "TripAdvisor" amenity lists but specific to cleanliness (e.g., Icons for Gloves, Hairnets, Mineral Water).

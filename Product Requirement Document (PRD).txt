@@ -1,0 +1,78 @@
+Project Name: Food Stall Discovery Platform Version: 1.0 (Funded Vision / Indian Market Context)
+
+
+Authors: Surena Shafizadeh & Team 
++1
+
+1.1 Executive Summary
+A dedicated mobile application and companion website connecting users with local street food stalls. The platform addresses the market gap for reliable, real-time information (open/closed status) and hygiene transparency in the unorganized street food sector.
++1
+
+1.2 Objectives
+
+Primary: To launch a localized digital platform connecting users with reliable, real-time food stall data.
+
+Secondary:
+
+Empower micro-entrepreneurs with simple digital tools for visibility.
+
+Establish a trust layer regarding hygiene through owner transparency and user feedback.
+
+Support deep localization (regional languages, cuisine specificity).
+
+1.3 Target Audience
+
+Users (Foodies): Students, office workers, and tourists aged 18-45 seeking authentic, affordable local food.
+
+
+Stall Owners (Vendors): Micro-entrepreneurs, mobile cart owners, and pop-up vendors, often with limited digital literacy.
++1
+
+1.4 Feature Requirements
+A. User-Facing Features (MVP)
+
+
+Discovery: Interactive map and list views showing stalls based on GPS location.
+
+Advanced Search & Filter:
+
+Filter by Cuisine (e.g., Chaat, Dosa), Dietary Tags (Jain, Halal, Vegan), and Price.
++1
+
+
+Hygiene Indicators: Filter by "Owner-Verified Hygiene" or user hygiene ratings.
+
+
+Real-Time Status: Prominent "Open Now" or "Closed" indicators updated live by owners.
+
+
+Stall Profiles: High-quality photos, menu lists, and location pins.
+
+
+Hygiene Review System: Structured review flow asking specifically about glove use, water source visibility, and cleanliness.
+
+B. Stall Owner-Facing Features (MVP)
+
+
+One-Tap Updates: Extremely simple interface to toggle "Open/Closed" status.
++1
+
+
+Location Pinning: Mobile vendors can update their live GPS location with one tap.
+
+
+Hygiene Showcase: Optional section to upload photos of water filters, gloves, or FSSAI registration.
+
+
+Menu Management: Simple text inputs to update daily specials or out-of-stock items.
+
+1.5 Success Metrics (KPIs)
+
+Reliability: Frequency of owner "Open/Closed" updates.
+
+
+Growth: DAU/MAU and Number of Registered Stalls.
++1
+
+
+Trust: Percentage of reviews containing hygiene-specific feedback.

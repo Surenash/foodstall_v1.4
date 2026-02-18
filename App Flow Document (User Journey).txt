@@ -1,0 +1,53 @@
+Purpose: This document outlines the logical path users and owners take through the application to ensure a frictionless experience.
+
+2.1 User Flow (The "Foodie")
+Onboarding:
+
+Splash Screen -> Language Selection (English/Hindi/Regional).
+
+Permission Request: Location (Precise for map).
+
+Action: User lands on Home Screen.
+
+Discovery:
+
+Home Screen: Search Bar + "Near Me" Map View + Categories (e.g., "Breakfast," "Hygiene Verified").
+
+Action: User filters by "Open Now" and "Vegetarian".
+
+Selection:
+
+List View: Results show Distance + Rating + "Open" Badge.
+
+Action: User taps a specific stall (e.g., "Raju's Chaat").
+
+Stall Detail:
+
+User views Menu, Photos, and Hygiene Showcase.
+
+User checks "Last Updated" timestamp to verify the stall is currently open.
+
+
+Action: User clicks "Navigate" (opens Google Maps).
+
+Post-Visit:
+
+User receives a prompt to rate the visit.
+
+Action: User rates 4/5 stars and answers specific questions: "Did the vendor wear gloves?" (Yes/No) .
+
+2.2 Owner Flow (The "Vendor")
+
+Login: Simple OTP-based login (Mobile Number).
+
+Dashboard (Home):
+
+Big Green Button: "GO ONLINE" (sets status to Open & updates GPS location).
+
+Big Red Button: "GO OFFLINE".
+
+Profile Management:
+
+Tab for "Daily Special": Owner types "Mango Lassi" and hits "Post".
+
+Tab for "Hygiene": Owner uploads photo of new water filter.
