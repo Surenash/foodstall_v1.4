@@ -11,10 +11,15 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.foodstallapp.discovery"
+      "package": "com.foodstall.mobile"
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d026d18b-b20b-419f-8fee-641fab2c45d0"
+      }
     }
   }
 }
