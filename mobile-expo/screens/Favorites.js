@@ -52,7 +52,7 @@ const Favorites = ({ navigation }) => {
                     cuisine_type: 'South Indian',
                     avg_rating: 4.7,
                     is_open: true,
-                    image: require('../assets/surenas_stall.png'),
+                    image: require('../assets/surenas_stall (1).png'),
                 },
                 {
                     id: '2',
@@ -60,7 +60,7 @@ const Favorites = ({ navigation }) => {
                     cuisine_type: 'North Indian Street Food',
                     avg_rating: 4.5,
                     is_open: true,
-                    image: require('../assets/rajus_chaat.png'),
+                    image: require('../assets/rajus_chaat (1).png'),
                 },
             ]);
         } finally {
@@ -108,7 +108,7 @@ const Favorites = ({ navigation }) => {
             return item.image;
         }
         // Default placeholder based on cuisine
-        return require('../assets/surenas_stall.png');
+        return require('../assets/surenas_stall (1).png');
     };
 
     const renderFavorite = ({ item }) => (
