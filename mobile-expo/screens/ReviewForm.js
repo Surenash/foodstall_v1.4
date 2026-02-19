@@ -7,13 +7,16 @@ import {
     TouchableOpacity,
     ScrollView,
     Alert,
+    Image,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons as Icon } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import theme from '../styles/theme';
+import { API_BASE_URL } from '../config/server';
 
 /**
  * ReviewForm Screen
- * Structured review flow with hygiene-specific questions
+ * Structured review flow with hygiene-specific questions and photo upload
  */
 const ReviewForm = ({ route, navigation }) => {
     const { stallId } = route.params;
@@ -22,6 +25,7 @@ const ReviewForm = ({ route, navigation }) => {
     const [rating, setRating] = useState(0);
     const [hygieneScore, setHygieneScore] = useState(0);
     const [comment, setComment] = useState('');
+    const [photos, setPhotos] = useState([]); // Array of photo URIs
 
     // Hygiene questions (Yes/No)
     const [hygieneResponses, setHygieneResponses] = useState({
@@ -47,6 +51,40 @@ const ReviewForm = ({ route, navigation }) => {
         });
     };
 
+    const pickImage = async (useCamera = false) => {
+        // Request permissions
+        if (useCamera) {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission needed', 'Camera permission is required');
+                return;
+            }
+        }
+
+        const options = {
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsMultipleSelection: true,
+            quality: 0.7,
+            selectionLimit: 5 - photos.length, // Max 5 photos
+        };
+
+        let result;
+        if (useCamera) {
+            result = await ImagePicker.launchCameraAsync(options);
+        } else {
+            result = await ImagePicker.launchImageLibraryAsync(options);
+        }
+
+        if (!result.canceled && result.assets) {
+            const newPhotos = result.assets.map(asset => asset.uri);
+            setPhotos([...photos, ...newPhotos].slice(0, 5)); // Max 5
+        }
+    };
+
+    const removePhoto = (index) => {
+        setPhotos(photos.filter((_, i) => i !== index));
+    };
+
     const handleSubmit = async () => {
         // Validation
         if (rating === 0) {
@@ -62,7 +100,7 @@ const ReviewForm = ({ route, navigation }) => {
         setSubmitting(true);
 
         try {
-            const response = await fetch('http://localhost:3000/api/v1/stalls/reviews', {
+            const response = await fetch(`${API_BASE_URL}/stalls/reviews`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -214,6 +252,50 @@ const ReviewForm = ({ route, navigation }) => {
                     textAlignVertical="top"
                 />
 
+                {/* Photo Upload Section */}
+                <View style={styles.separator} />
+                <Text style={styles.sectionTitle}>Add Photos (Optional)</Text>
+                <Text style={styles.sectionSubtitle}>
+                    Share up to 5 photos of your food
+                </Text>
+
+                {/* Photo Buttons */}
+                <View style={styles.photoButtons}>
+                    <TouchableOpacity
+                        style={styles.photoButton}
+                        onPress={() => pickImage(false)}
+                        disabled={photos.length >= 5}
+                    >
+                        <Icon name="photo-library" size={24} color={theme.colors.primary} />
+                        <Text style={styles.photoButtonText}>Gallery</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.photoButton}
+                        onPress={() => pickImage(true)}
+                        disabled={photos.length >= 5}
+                    >
+                        <Icon name="camera-alt" size={24} color={theme.colors.primary} />
+                        <Text style={styles.photoButtonText}>Camera</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* Photo Preview Grid */}
+                {photos.length > 0 && (
+                    <View style={styles.photoGrid}>
+                        {photos.map((uri, index) => (
+                            <View key={index} style={styles.photoWrapper}>
+                                <Image source={{ uri }} style={styles.photoPreview} />
+                                <TouchableOpacity
+                                    style={styles.removePhotoBtn}
+                                    onPress={() => removePhoto(index)}
+                                >
+                                    <Icon name="close" size={16} color="white" />
+                                </TouchableOpacity>
+                            </View>
+                        ))}
+                    </View>
+                )}
+
                 {/* Submit Button */}
                 <TouchableOpacity
                     style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
@@ -265,6 +347,7 @@ const styles = StyleSheet.create({
         fontFamily: theme.typography.fontFamily.bold,
         color: theme.colors.primary,
         marginTop: theme.spacing.xs,
+        marginBottom: theme.spacing.xs,
     },
     separator: {
         height: 1,
@@ -350,6 +433,54 @@ const styles = StyleSheet.create({
         fontSize: theme.typography.fontSize.lg,
         fontFamily: theme.typography.fontFamily.bold,
         color: theme.colors.textLight,
+    },
+    photoButtons: {
+        flexDirection: 'row',
+        gap: theme.spacing.md,
+        marginTop: theme.spacing.sm,
+    },
+    photoButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: theme.spacing.md,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.primary,
+        borderStyle: 'dashed',
+        gap: theme.spacing.xs,
+    },
+    photoButtonText: {
+        fontSize: theme.typography.fontSize.base,
+        color: theme.colors.primary,
+        fontWeight: '500',
+    },
+    photoGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: theme.spacing.sm,
+        marginTop: theme.spacing.md,
+    },
+    photoWrapper: {
+        position: 'relative',
+    },
+    photoPreview: {
+        width: 80,
+        height: 80,
+        borderRadius: theme.borderRadius.md,
+    },
+    removePhotoBtn: {
+        position: 'absolute',
+        top: -8,
+        right: -8,
+        backgroundColor: theme.colors.error,
+        borderRadius: 12,
+        width: 24,
+        height: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 });
 

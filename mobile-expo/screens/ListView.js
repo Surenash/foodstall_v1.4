@@ -8,12 +8,16 @@ import {
     ActivityIndicator,
     TextInput,
     Modal,
+    Alert,
+    SafeAreaView,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import Geolocation from 'react-native-geolocation-service';
+import { MaterialIcons as Icon } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import StallCard from '../components/StallCard';
 import { stallsAPI } from '../services/api';
 import theme from '../styles/theme';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getTranslationSync } from '../services/translations';
 
 /**
  * ListView Screen
@@ -26,6 +30,23 @@ const ListView = ({ navigation }) => {
     const [userLocation, setUserLocation] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [showFilters, setShowFilters] = useState(false);
+    const [t, setT] = useState({});
+
+    useEffect(() => {
+        const loadTranslations = async () => {
+            const lang = await AsyncStorage.getItem('language') || 'en';
+            setT({
+                searchStalls: getTranslationSync('searchStalls', lang),
+                nearbyStalls: getTranslationSync('nearbyStalls', lang),
+                popularStalls: getTranslationSync('popularStalls', lang), // using for now
+                findingStalls: 'Finding stalls near you...', // Add these to translations
+                noStallsFound: 'No stalls found', // Add these to translations
+                resultsFound: 'stalls found',
+                stall: 'stall',
+            });
+        };
+        loadTranslations();
+    }, []);
 
     // Filter states
     const [filters, setFilters] = useState({
@@ -50,21 +71,26 @@ const ListView = ({ navigation }) => {
         applyFilters();
     }, [stalls, searchQuery, filters]);
 
-    const getUserLocation = () => {
-        Geolocation.getCurrentPosition(
-            (position) => {
-                setUserLocation({
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude,
-                });
-            },
-            (error) => {
-                console.error('Location error:', error);
-                // Use default Mumbai location
+    const getUserLocation = async () => {
+        try {
+            let { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                // Use default Mumbai location if permission denied
+                console.log('Location permission denied');
                 setUserLocation({ latitude: 19.0760, longitude: 72.8777 });
-            },
-            { enableHighAccuracy: true, timeout: 15000 }
-        );
+                return;
+            }
+
+            let location = await Location.getCurrentPositionAsync({});
+            setUserLocation({
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+            });
+        } catch (error) {
+            console.error('Location error:', error);
+            // Use default Mumbai location
+            setUserLocation({ latitude: 19.0760, longitude: 72.8777 });
+        }
     };
 
     const fetchStalls = async () => {
@@ -78,7 +104,55 @@ const ListView = ({ navigation }) => {
             );
             setStalls(data.stalls || []);
         } catch (error) {
-            console.error('Error fetching stalls:', error);
+            console.log('API unavailable, using mock data:', error.message);
+            // Use mock data as fallback
+            setStalls([
+                {
+                    id: '1',
+                    name: "Surena's Stall",
+                    cuisine_type: 'South Indian',
+                    description: 'Authentic South Indian delicacies - Crispy Dosas, fluffy Idlis, and piping hot Sambar',
+                    is_open: true,
+                    hygiene_score: 4.5,
+                    rating: 4.7,
+                    review_count: 156,
+                    distance_km: '0.3',
+                    dietary_tags: ['Vegetarian', 'Vegan'],
+                    image: require('../assets/surenas_stall.png'),
+                    menu_highlights: 'Masala Dosa ₹60 | Idli Sambar ₹40 | Filter Coffee ₹20',
+                    location: { latitude: 19.0760, longitude: 72.8777 },
+                },
+                {
+                    id: '2',
+                    name: "Raju's Chaat Corner",
+                    cuisine_type: 'North Indian Street Food',
+                    description: 'Famous for Pani Puri, Bhel Puri, and Sev Puri since 1985',
+                    is_open: true,
+                    hygiene_score: 4.2,
+                    rating: 4.5,
+                    review_count: 230,
+                    distance_km: '0.5',
+                    dietary_tags: ['Vegetarian', 'Jain'],
+                    image: require('../assets/rajus_chaat.png'),
+                    menu_highlights: 'Pani Puri ₹30 | Bhel Puri ₹40 | Sev Puri ₹45',
+                    location: { latitude: 19.0765, longitude: 72.8780 },
+                },
+                {
+                    id: '3',
+                    name: 'Biryani Express',
+                    cuisine_type: 'Hyderabadi',
+                    description: 'Authentic Dum Biryani and Haleem',
+                    is_open: false,
+                    hygiene_score: 4.0,
+                    rating: 4.3,
+                    review_count: 89,
+                    distance_km: '1.2',
+                    dietary_tags: ['Halal', 'Non-Veg'],
+                    image: require('../assets/biryani_express.png'),
+                    menu_highlights: 'Chicken Biryani ₹120 | Mutton Biryani ₹180',
+                    location: { latitude: 19.0750, longitude: 72.8790 },
+                },
+            ]);
         } finally {
             setLoading(false);
         }
@@ -258,7 +332,7 @@ const ListView = ({ navigation }) => {
                 <Icon name="search" size={24} color={theme.colors.textSecondary} />
                 <TextInput
                     style={styles.searchInput}
-                    placeholder="Search by name or cuisine..."
+                    placeholder={t.searchStalls || "Search by name or cuisine..."}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                 />
@@ -402,7 +476,7 @@ const styles = StyleSheet.create({
         color: theme.colors.textPrimary,
     },
     listContent: {
-        paddingBottom: theme.spacing.lg,
+        paddingBottom: 100, // Space for bottom navigation bar
     },
     emptyContainer: {
         flex: 1,

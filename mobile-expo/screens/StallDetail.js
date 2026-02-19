@@ -8,9 +8,12 @@ import {
     TouchableOpacity,
     ActivityIndicator,
     Linking,
+    Alert,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons as Icon } from '@expo/vector-icons';
 import theme from '../styles/theme';
+import { getUserData } from '../services/storage';
+import { API_BASE_URL as API_BASE } from '../config/server';
 
 /**
  * StallDetail Screen
@@ -21,24 +24,91 @@ const StallDetail = ({ route, navigation }) => {
     const [stall, setStall] = useState(null);
     const [reviews, setReviews] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [isFavorite, setIsFavorite] = useState(false);
 
     useEffect(() => {
         fetchStallDetails();
+        checkFavoriteStatus();
     }, []);
 
     const fetchStallDetails = async () => {
+        // Mock data - used as fallback when API is unavailable
+        const mockStalls = {
+            '1': {
+                id: '1',
+                name: "Surena's Stall",
+                cuisine_type: 'South Indian',
+                description: 'Authentic South Indian delicacies - Crispy Dosas, fluffy Idlis, and piping hot Sambar. Family-run stall serving fresh food since 2015.',
+                is_open: true,
+                avg_rating: 4.7,
+                hygiene_score: 4.5,
+                review_count: 156,
+                latitude: 19.0760,
+                longitude: 72.8777,
+                dietary_tags: ['Vegetarian', 'Vegan'],
+                menu_text: 'Masala Dosa - ₹60\nIdli Sambar (4 pcs) - ₹40\nFilter Coffee - ₹20\nMedu Vada - ₹30\nUttapam - ₹50',
+                price_range: '₹20 - ₹80',
+                hygiene_badges: { fssai_verified: true },
+                image: require('../assets/surenas_stall.png'),
+            },
+            '2': {
+                id: '2',
+                name: "Raju's Chaat Corner",
+                cuisine_type: 'North Indian Street Food',
+                description: 'Famous for Pani Puri, Bhel Puri, and Sev Puri since 1985. A local favorite!',
+                is_open: true,
+                avg_rating: 4.5,
+                hygiene_score: 4.2,
+                review_count: 230,
+                latitude: 19.0765,
+                longitude: 72.8780,
+                dietary_tags: ['Vegetarian', 'Jain'],
+                menu_text: 'Pani Puri (6 pcs) - ₹30\nBhel Puri - ₹40\nSev Puri - ₹45\nDahi Puri - ₹50',
+                price_range: '₹30 - ₹60',
+                image: require('../assets/rajus_chaat.png'),
+            },
+            '3': {
+                id: '3',
+                name: 'Biryani Express',
+                cuisine_type: 'Hyderabadi',
+                description: 'Authentic Dum Biryani and Haleem prepared with traditional recipes.',
+                is_open: false,
+                avg_rating: 4.3,
+                hygiene_score: 4.0,
+                review_count: 89,
+                latitude: 19.0750,
+                longitude: 72.8790,
+                dietary_tags: ['Halal', 'Non-Veg'],
+                menu_text: 'Chicken Biryani - ₹120\nMutton Biryani - ₹180\nHaleem - ₹100',
+                price_range: '₹100 - ₹200',
+                image: require('../assets/biryani_express.png'),
+            },
+        };
+
+        const mockReviews = [
+            { id: 'r1', reviewer_name: 'Priya M.', rating: 5, hygiene_score: 5, comment: 'Best dosa in the area! Super crispy and the sambar is amazing.', photos: ['https://images.unsplash.com/photo-1630383249896-424e482df921?w=300'], date: '2 days ago' },
+            { id: 'r2', reviewer_name: 'Rahul K.', rating: 4, hygiene_score: 4, comment: 'Good food, reasonable prices. Always fresh.', photos: [], date: '1 week ago' },
+            { id: 'r3', reviewer_name: 'Anita S.', rating: 5, hygiene_score: 5, comment: 'Love the filter coffee! Authentic taste.', photos: ['https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=300'], date: '2 weeks ago' },
+        ];
+
         try {
-            const response = await fetch(
-                `http://localhost:3000/api/v1/stalls/${stallId}`
-            );
+            const response = await fetch(`${API_BASE}/stalls/${stallId}`);
             const data = await response.json();
 
-            if (data.success) {
+            if (data.success && data.stall) {
                 setStall(data.stall);
-                setReviews(data.reviews);
+                setReviews(data.reviews || []);
+            } else {
+                // API returned but no stall data - use mock
+                console.log('API returned no stall data, using mock');
+                setStall(mockStalls[stallId] || mockStalls['1']);
+                setReviews(mockReviews);
             }
         } catch (error) {
-            console.error('Error fetching stall details:', error);
+            console.log('API unavailable, using mock data:', error.message);
+            // Use mock data as fallback
+            setStall(mockStalls[stallId] || mockStalls['1']);
+            setReviews(mockReviews);
         } finally {
             setLoading(false);
         }
@@ -51,6 +121,51 @@ const StallDetail = ({ route, navigation }) => {
 
     const handleReview = () => {
         navigation.navigate('ReviewForm', { stallId: stall.id });
+    };
+
+    const checkFavoriteStatus = async () => {
+        try {
+            const userData = await getUserData();
+            if (userData?.id) {
+                const response = await fetch(
+                    `${API_BASE}/users/${userData.id}/favorites/${stallId}/check`
+                );
+                const data = await response.json();
+                if (data.success) {
+                    setIsFavorite(data.is_favorited);
+                }
+            }
+        } catch (error) {
+            // Silently fail, default to not favorited
+        }
+    };
+
+    const toggleFavorite = async () => {
+        try {
+            const userData = await getUserData();
+            if (!userData?.id) {
+                Alert.alert('Login Required', 'Please login to add favorites.');
+                return;
+            }
+
+            const method = isFavorite ? 'DELETE' : 'POST';
+            await fetch(
+                `${API_BASE}/users/${userData.id}/favorites/${stallId}`,
+                { method }
+            );
+
+            setIsFavorite(!isFavorite);
+        } catch (error) {
+            console.log('Toggling favorite locally:', error.message);
+            setIsFavorite(!isFavorite);
+        }
+    };
+
+    const handleReport = () => {
+        navigation.navigate('ReportStall', {
+            stallId: stall.id,
+            stallName: stall.name,
+        });
     };
 
     if (loading) {
@@ -71,17 +186,31 @@ const StallDetail = ({ route, navigation }) => {
 
     return (
         <ScrollView style={styles.container}>
+            {/* Stall Header Image */}
+            {stall.image && (
+                <Image source={stall.image} style={styles.headerImage} resizeMode="cover" />
+            )}
+
             {/* Header */}
             <View style={styles.header}>
-                <Text style={styles.stallName}>{stall.name}</Text>
-                <View style={[
-                    styles.statusBadge,
-                    stall.is_open ? styles.statusOpen : styles.statusClosed
-                ]}>
-                    <Text style={styles.statusText}>
-                        {stall.is_open ? 'OPEN NOW' : 'CLOSED'}
-                    </Text>
+                <View style={styles.headerContent}>
+                    <Text style={styles.stallName}>{stall.name}</Text>
+                    <View style={[
+                        styles.statusBadge,
+                        stall.is_open ? styles.statusOpen : styles.statusClosed
+                    ]}>
+                        <Text style={styles.statusText}>
+                            {stall.is_open ? 'OPEN NOW' : 'CLOSED'}
+                        </Text>
+                    </View>
                 </View>
+                <TouchableOpacity onPress={toggleFavorite} style={styles.favoriteBtn}>
+                    <Icon
+                        name={isFavorite ? 'favorite' : 'favorite-border'}
+                        size={28}
+                        color={isFavorite ? theme.colors.error : 'white'}
+                    />
+                </TouchableOpacity>
             </View>
 
             {/* Info Cards */}
@@ -179,6 +308,12 @@ const StallDetail = ({ route, navigation }) => {
                 </TouchableOpacity>
             </View>
 
+            {/* Report Issue Button */}
+            <TouchableOpacity style={styles.reportButton} onPress={handleReport}>
+                <Icon name="flag" size={18} color={theme.colors.textSecondary} />
+                <Text style={styles.reportText}>Report an issue with this stall</Text>
+            </TouchableOpacity>
+
             {/* Reviews Section */}
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>
@@ -187,7 +322,12 @@ const StallDetail = ({ route, navigation }) => {
                 {reviews.map((review) => (
                     <View key={review.id} style={styles.reviewCard}>
                         <View style={styles.reviewHeader}>
-                            <Text style={styles.reviewerName}>{review.reviewer_name}</Text>
+                            <View>
+                                <Text style={styles.reviewerName}>{review.reviewer_name}</Text>
+                                {review.date && (
+                                    <Text style={styles.reviewDate}>{review.date}</Text>
+                                )}
+                            </View>
                             <View style={styles.ratingContainer}>
                                 <Icon name="star" size={16} color={theme.colors.secondary} />
                                 <Text style={styles.ratingText}>{review.rating}/5</Text>
@@ -195,6 +335,19 @@ const StallDetail = ({ route, navigation }) => {
                         </View>
                         {review.comment && (
                             <Text style={styles.reviewComment}>{review.comment}</Text>
+                        )}
+                        {/* Review Photos */}
+                        {review.photos && review.photos.length > 0 && (
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.reviewPhotosScroll}>
+                                {review.photos.map((photoUri, index) => (
+                                    <Image
+                                        key={index}
+                                        source={{ uri: photoUri }}
+                                        style={styles.reviewPhoto}
+                                        resizeMode="cover"
+                                    />
+                                ))}
+                            </ScrollView>
                         )}
                         <View style={styles.hygieneRating}>
                             <Icon name="verified-user" size={14} color={theme.colors.success} />
@@ -231,13 +384,21 @@ const styles = StyleSheet.create({
     header: {
         backgroundColor: theme.colors.primary,
         padding: theme.spacing.lg,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
+    },
+    headerContent: {
+        flex: 1,
+        alignItems: 'flex-start',
+    },
+    favoriteBtn: {
+        padding: theme.spacing.sm,
     },
     stallName: {
         fontSize: theme.typography.fontSize['2xl'],
         fontFamily: theme.typography.fontFamily.bold,
         color: theme.colors.textLight,
-        textAlign: 'center',
     },
     statusBadge: {
         marginTop: theme.spacing.sm,
@@ -255,6 +416,18 @@ const styles = StyleSheet.create({
         fontSize: theme.typography.fontSize.sm,
         fontFamily: theme.typography.fontFamily.bold,
         color: theme.colors.textLight,
+    },
+    reportButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: theme.spacing.sm,
+        paddingHorizontal: theme.spacing.md,
+        gap: theme.spacing.xs,
+    },
+    reportText: {
+        fontSize: theme.typography.fontSize.sm,
+        color: theme.colors.textSecondary,
     },
     infoCard: {
         backgroundColor: theme.colors.surface,
@@ -400,6 +573,25 @@ const styles = StyleSheet.create({
         fontFamily: theme.typography.fontFamily.medium,
         color: theme.colors.success,
         marginLeft: 4,
+    },
+    headerImage: {
+        width: '100%',
+        height: 200,
+    },
+    reviewDate: {
+        fontSize: theme.typography.fontSize.xs,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
+    },
+    reviewPhotosScroll: {
+        marginTop: theme.spacing.sm,
+        marginBottom: theme.spacing.xs,
+    },
+    reviewPhoto: {
+        width: 100,
+        height: 100,
+        borderRadius: theme.borderRadius.md,
+        marginRight: theme.spacing.sm,
     },
 });
 

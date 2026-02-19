@@ -4,6 +4,7 @@ import {
     Text,
     StyleSheet,
     TouchableOpacity,
+    ScrollView,
     Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,28 +29,30 @@ const LanguageSelection = ({ navigation }) => {
         { code: 'ml', name: 'Malayalam', nativeName: 'മലയാളം' },
         { code: 'or', name: 'Oriya', nativeName: 'ଓଡ଼ିଆ' },
         { code: 'pa', name: 'Punjabi', nativeName: 'ਪੰਜਾਬੀ' },
-        { code: 'sa', name: 'Sanskrit', nativeName: 'संस्कृत' },
-        { code: 'si', name: 'Sinhala', nativeName: 'සිංහල' },
         { code: 'ur', name: 'Urdu', nativeName: 'اردو' },
-        ];
+    ];
 
     const handleContinue = async () => {
         // Save language preference
         await AsyncStorage.setItem('language', selectedLanguage);
 
-        // Navigate to location permission or main app
-        navigation.replace('Main');
+        // Navigate to login screen
+        navigation.replace('LoginScreen');
     };
 
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.title}>🍲</Text>
-                <Text style={styles.appName}>Food Stall Discovery</Text>
+                <Image
+                    source={require('../assets/logo_icon.png')}
+                    style={styles.logo}
+                    resizeMode="contain"
+                />
+                <Text style={styles.appName}>Street Eat</Text>
                 <Text style={styles.subtitle}>Choose your preferred language</Text>
             </View>
 
-            <View style={styles.languageList}>
+            <ScrollView style={styles.languageList}>
                 {languages.map((language) => (
                     <TouchableOpacity
                         key={language.code}
@@ -70,7 +73,7 @@ const LanguageSelection = ({ navigation }) => {
                         )}
                     </TouchableOpacity>
                 ))}
-            </View>
+            </ScrollView>
 
             <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
                 <Text style={styles.continueButtonText}>Continue</Text>
@@ -89,8 +92,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: theme.spacing['2xl'],
     },
-    title: {
-        fontSize: 64,
+    logo: {
+        width: 100,
+        height: 100,
         marginBottom: theme.spacing.md,
     },
     appName: {

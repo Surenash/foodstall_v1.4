@@ -1,12 +1,13 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { MaterialIcons as Icon } from '@expo/vector-icons';
 import theme from '../styles/theme';
 
 /**
  * StallCard Component
  * 
  * Displays stall information in a card format with:
+ * - Stall photo
  * - Stall name and cuisine type
  * - Distance from user's location
  * - Dynamic Open/Closed status badge
@@ -24,8 +25,12 @@ const StallCard = ({ stall, onPress }) => {
         is_open,
         hygiene_score = 0,
         avg_rating = 0,
+        rating = 0,
         price_range,
+        image,
     } = stall;
+
+    const displayRating = avg_rating || rating || 0;
 
     return (
         <TouchableOpacity
@@ -33,6 +38,15 @@ const StallCard = ({ stall, onPress }) => {
             onPress={onPress}
             activeOpacity={0.7}
         >
+            {/* Stall Image */}
+            {image ? (
+                <Image source={image} style={styles.stallImage} resizeMode="cover" />
+            ) : (
+                <View style={styles.imagePlaceholder}>
+                    <Icon name="store" size={48} color={theme.colors.textSecondary} />
+                </View>
+            )}
+
             {/* Header: Name and Status */}
             <View style={styles.header}>
                 <View style={styles.titleContainer}>
@@ -62,10 +76,10 @@ const StallCard = ({ stall, onPress }) => {
                 </View>
 
                 {/* Rating */}
-                {parseFloat(avg_rating) > 0 && (
+                {parseFloat(displayRating) > 0 && (
                     <View style={styles.infoItem}>
                         <Icon name="star" size={16} color={theme.colors.secondary} />
-                        <Text style={styles.infoText}>{avg_rating}</Text>
+                        <Text style={styles.infoText}>{displayRating}</Text>
                     </View>
                 )}
 
@@ -105,6 +119,22 @@ const getHygieneColor = (score) => {
 const styles = StyleSheet.create({
     card: {
         ...theme.components.stallCard,
+        overflow: 'hidden',
+    },
+    stallImage: {
+        width: '100%',
+        height: 150,
+        borderRadius: theme.borderRadius.md,
+        marginBottom: theme.spacing.sm,
+    },
+    imagePlaceholder: {
+        width: '100%',
+        height: 100,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.md,
+        marginBottom: theme.spacing.sm,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     header: {
         flexDirection: 'row',

@@ -19,7 +19,7 @@ npm run dev
 cd mobile
 npm run android  # or npm run ios
 ```
-
+c
 ### 4. Test API
 ```bash
 # Health check

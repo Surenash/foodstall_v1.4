@@ -3,13 +3,15 @@ import {
     View,
     Text,
     StyleSheet,
-    FlatList,
     ActivityIndicator,
     Alert,
 } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import Geolocation from 'react-native-geolocation-service';
+import MapView, { Marker } from 'react-native-maps';
+import * as Location from 'expo-location';
 import theme from '../styles/theme';
+import { API_BASE_URL } from '../config/server';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getTranslationSync } from '../services/translations';
 
 /**
  * MapView Screen
@@ -22,56 +24,104 @@ const StallMapView = ({ navigation }) => {
     const [region, setRegion] = useState({
         latitude: 19.0760, // Default to Mumbai
         longitude: 72.8777,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
     });
+    const [t, setT] = useState({});
 
     useEffect(() => {
-        getUserLocation();
+        const loadTranslations = async () => {
+            const lang = await AsyncStorage.getItem('language') || 'en';
+            setT({
+                findingLocation: getTranslationSync('findingLocation', lang),
+                open: 'Open', // Add to translations
+                closed: 'Closed', // Add to translations
+            });
+        };
+        loadTranslations();
     }, []);
 
     useEffect(() => {
-        if (userLocation) {
-            fetchNearbyStalls();
-        }
-    }, [userLocation]);
+        initializeMap();
+    }, []);
 
-    const getUserLocation = () => {
-        Geolocation.getCurrentPosition(
-            (position) => {
-                const location = {
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude,
-                };
-                setUserLocation(location);
-                setRegion({
-                    ...location,
-                    latitudeDelta: 0.05,
-                    longitudeDelta: 0.05,
+    const initializeMap = async () => {
+        // Default location (Mumbai)
+        let userLoc = { latitude: 19.0760, longitude: 72.8777 };
+
+        try {
+            let { status } = await Location.requestForegroundPermissionsAsync();
+            if (status === 'granted') {
+                let location = await Location.getCurrentPositionAsync({
+                    accuracy: Location.Accuracy.Balanced,
                 });
-            },
-            (error) => {
-                console.error('Location error:', error);
-                Alert.alert('Location Error', 'Could not get your location');
-                setLoading(false);
-            },
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-        );
+                userLoc = {
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude,
+                };
+                console.log('📍 Got user location:', userLoc);
+            } else {
+                console.log('📍 Location permission denied, using default');
+            }
+        } catch (error) {
+            console.log('📍 Location error, using default:', error.message);
+        }
+
+        setUserLocation(userLoc);
+        setRegion({
+            ...userLoc,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+        });
+
+        // Load stalls after setting location
+        await loadStalls(userLoc);
     };
 
-    const fetchNearbyStalls = async () => {
+    const loadStalls = async (location) => {
         try {
             const response = await fetch(
-                `http://localhost:3000/api/v1/stalls/nearby?lat=${userLocation.latitude}&long=${userLocation.longitude}&radius=5000`
+                `${API_BASE_URL}/stalls/nearby?lat=${location.latitude}&long=${location.longitude}&radius=5000`
             );
             const data = await response.json();
 
-            if (data.success) {
+            if (data.success && data.stalls?.length > 0) {
+                console.log('🗺️ Loaded stalls from API:', data.stalls.length);
                 setStalls(data.stalls);
+            } else {
+                throw new Error('No stalls from API');
             }
         } catch (error) {
-            console.error('Error fetching stalls:', error);
-            Alert.alert('Error', 'Failed to load stalls');
+            console.log('🗺️ API unavailable, using mock stalls:', error.message);
+            // Use mock stalls as fallback - positioned relative to user location
+            const mockStalls = [
+                {
+                    id: '1',
+                    name: "Surena's Stall",
+                    cuisine_type: 'South Indian',
+                    is_open: true,
+                    latitude: location.latitude + 0.003,
+                    longitude: location.longitude + 0.002,
+                },
+                {
+                    id: '2',
+                    name: "Raju's Chaat Corner",
+                    cuisine_type: 'North Indian',
+                    is_open: true,
+                    latitude: location.latitude - 0.002,
+                    longitude: location.longitude + 0.003,
+                },
+                {
+                    id: '3',
+                    name: 'Biryani Express',
+                    cuisine_type: 'Hyderabadi',
+                    is_open: false,
+                    latitude: location.latitude + 0.004,
+                    longitude: location.longitude - 0.003,
+                },
+            ];
+            console.log('🗺️ Using mock stalls at:', location);
+            setStalls(mockStalls);
         } finally {
             setLoading(false);
         }
@@ -93,11 +143,10 @@ const StallMapView = ({ navigation }) => {
     return (
         <View style={styles.container}>
             <MapView
-                provider={PROVIDER_GOOGLE}
                 style={styles.map}
-                region={region}
-                showsUserLocation
-                showsMyLocationButton
+                initialRegion={region}
+                showsUserLocation={true}
+                showsMyLocationButton={true}
             >
                 {stalls.map((stall) => (
                     <Marker
@@ -107,12 +156,31 @@ const StallMapView = ({ navigation }) => {
                             longitude: parseFloat(stall.longitude),
                         }}
                         title={stall.name}
-                        description={stall.cuisine_type}
-                        onPress={() => handleMarkerPress(stall)}
-                        pinColor={stall.is_open ? theme.colors.statusOpen : theme.colors.statusClosed}
+                        description={`${stall.cuisine_type} • ${stall.is_open ? 'OPEN' : 'CLOSED'} • Tap to view`}
+                        pinColor={stall.is_open ? '#22C55E' : '#EF4444'}
+                        onCalloutPress={() => handleMarkerPress(stall)}
                     />
                 ))}
             </MapView>
+
+            {/* Legend */}
+            <View style={styles.legend}>
+                <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: '#22C55E' }]} />
+                    <Text style={styles.legendText}>{t.open || 'Open'}</Text>
+                </View>
+                <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
+                    <Text style={styles.legendText}>{t.closed || 'Closed'}</Text>
+                </View>
+            </View>
+
+            {/* Debug info */}
+            <View style={styles.debugInfo}>
+                <Text style={styles.debugText}>
+                    {stalls.length} stalls loaded
+                </Text>
+            </View>
         </View>
     );
 };
@@ -134,6 +202,46 @@ const styles = StyleSheet.create({
         marginTop: theme.spacing.md,
         fontSize: theme.typography.fontSize.base,
         color: theme.colors.textSecondary,
+    },
+    legend: {
+        position: 'absolute',
+        bottom: 100,
+        right: 16,
+        backgroundColor: 'white',
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.sm,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+    },
+    legendItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 4,
+    },
+    legendDot: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        marginRight: 8,
+    },
+    legendText: {
+        fontSize: theme.typography.fontSize.sm,
+        color: theme.colors.textPrimary,
+    },
+    debugInfo: {
+        position: 'absolute',
+        top: 16,
+        left: 16,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        padding: 8,
+        borderRadius: 4,
+    },
+    debugText: {
+        color: 'white',
+        fontSize: 12,
     },
 });
 

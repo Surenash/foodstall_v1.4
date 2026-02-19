@@ -38,10 +38,10 @@ export const colors = {
 export const typography = {
     // Font Family (Google Fonts: Inter or Roboto)
     fontFamily: {
-        regular: 'Inter-Regular',
-        medium: 'Inter-Medium',
-        semibold: 'Inter-SemiBold',
-        bold: 'Inter-Bold',
+        regular: 'System',
+        medium: 'System',
+        semibold: 'System',
+        bold: 'System',
     },
 
     // Font Sizes
