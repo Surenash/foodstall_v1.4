@@ -19,7 +19,7 @@ npm run dev
 cd mobile
 npm run android  # or npm run ios
 ```
-c
+
 ### 4. Test API
 ```bash
 # Health check
@@ -54,17 +54,17 @@ food_stall/
 ## Key Features
 
 ### User App
-- 🗺️ Find stalls on map (sorted by distance)
-- 🔴🟢 Real-time Open/Closed status
-- 🏥 Hygiene score (1-5) with breakdown
-- ⭐ Reviews with hygiene questions
-- 🔍 Filter by cuisine, dietary tags
+- Find stalls on map (sorted by distance)
+- Real-time Open/Closed status
+- Hygiene score (1-5) with breakdown
+- Reviews with hygiene questions
+- Filter by cuisine, dietary tags
 
 ### Owner App
-- 🔘 One-tap Open/Closed toggle (200px button)
-- 📍 Auto GPS location update
-- 📸 Upload hygiene photos (FSSAI)
-- 📝 Update menu text
+- One-tap Open/Closed toggle (200px button)
+- Auto GPS location update
+- Upload hygiene photos (FSSAI)
+- Update menu text
 
 ## Tech Stack
 
