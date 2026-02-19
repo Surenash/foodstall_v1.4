@@ -1,159 +1,106 @@
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MOCK_STALLS, MOCK_OWNER, MOCK_USER } from './mockData';
 
-// Configure base URL (use your computer's  IP for mobile device access)
-const BASE_URL = 'http://192.168.0.115:3000/api/v1';
-
-// Create axios instance
-const apiClient = axios.create({
-    baseURL: BASE_URL,
-    timeout: 10000,
-    headers: {
-        'Content-Type': 'application/json',
-    },
-});
-
-// Request interceptor to add auth token
-apiClient.interceptors.request.use(
-    async (config) => {
-        const token = await AsyncStorage.getItem('authToken');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-    },
-    (error) => {
-        return Promise.reject(error);
-    }
-);
-
-// Response interceptor for error handling
-apiClient.interceptors.response.use(
-    (response) => response.data,
-    (error) => {
-        if (error.response) {
-            // Server responded with error
-            throw new Error(error.response.data.error || 'Server error');
-        } else if (error.request) {
-            // Request made but no response
-            throw new Error('Network error. Please check your connection.');
-        } else {
-            throw new Error('An unexpected error occurred');
-        }
-    }
-);
-
-// API methods
+// API methods patched for Standalone Demo Mode
 export const stallsAPI = {
     // Get nearby stalls
-    getNearby: (lat, long, radius = 1000, openOnly = false) => {
-        return apiClient.get('/stalls/nearby', {
-            params: { lat, long, radius, open_only: openOnly },
-        });
+    getNearby: async (lat, long, radius = 1000, openOnly = false) => {
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Filter logic mock
+        let stalls = [...MOCK_STALLS];
+        if (openOnly) {
+            stalls = stalls.filter(s => s.is_open);
+        }
+
+        return { success: true, stalls: stalls };
     },
 
     // Get stall details
-    getDetails: (stallId) => {
-        return apiClient.get(`/stalls/${stallId}`);
+    getDetails: async (stallId) => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const stall = MOCK_STALLS.find(s => s.id == stallId);
+        if (!stall) throw new Error("Stall not found");
+        return { success: true, stall };
     },
 
     // Submit review
-    submitReview: (reviewData) => {
-        return apiClient.post('/stalls/reviews', reviewData);
+    submitReview: async (reviewData) => {
+        await new Promise(resolve => setTimeout(resolve, 800));
+        return { success: true, message: "Review submitted successfully" };
     },
 
     // Search stalls
-    search: (query, filters = {}) => {
-        return apiClient.get('/stalls/search', {
-            params: { q: query, ...filters },
-        });
+    search: async (query, filters = {}) => {
+        await new Promise(resolve => setTimeout(resolve, 400));
+        const q = query.toLowerCase();
+        const stalls = MOCK_STALLS.filter(s =>
+            s.name.toLowerCase().includes(q) ||
+            s.cuisine_type.toLowerCase().includes(q)
+        );
+        return { success: true, stalls };
     },
 };
 
 export const ownerAPI = {
     // Update stall status
-    updateStatus: (stallId, ownerId, isOpen, location = null) => {
-        return apiClient.post('/owner/status', {
-            stall_id: stallId,
-            owner_id: ownerId,
-            is_open: isOpen,
-            location,
-        });
+    updateStatus: async (stallId, ownerId, isOpen, location = null) => {
+        await new Promise(resolve => setTimeout(resolve, 600));
+        console.log(`[MOCK OS] Status updated: ${isOpen ? 'OPEN' : 'CLOSED'} at`, location);
+        // Update local mock state if needed (not persistent across reloads but good for session)
+        MOCK_OWNER.is_open = isOpen;
+        if (location) MOCK_OWNER.location = location;
+
+        return { success: true, message: "Status updated" };
     },
 
     // Update menu
-    updateMenu: (stallId, ownerId, menuText) => {
-        return apiClient.put('/owner/menu', {
-            stall_id: stallId,
-            owner_id: ownerId,
-            menu_text: menuText,
-        });
+    updateMenu: async (stallId, ownerId, menuText) => {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return { success: true, message: "Menu updated" };
     },
 
     // Upload hygiene proof
     uploadHygieneProof: async (stallId, ownerId, photoUri, photoType) => {
-        const formData = new FormData();
-        formData.append('stall_id', stallId);
-        formData.append('owner_id', ownerId);
-        formData.append('photo_type', photoType);
-
-        // Extract filename from URI
-        const filename = photoUri.split('/').pop();
-        const match = /\.(\w+)$/.exec(filename);
-        const type = match ? `image/${match[1]}` : 'image/jpeg';
-
-        formData.append('photo', {
-            uri: photoUri,
-            name: filename,
-            type,
-        });
-
-        return apiClient.post('/owner/hygiene-proof', formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return { success: true, message: "Proof uploaded" };
     },
 
     // Get owner's stalls
-    getStalls: (ownerId) => {
-        return apiClient.get(`/owner/stalls/${ownerId}`);
+    getStalls: async (ownerId) => {
+        return { success: true, stalls: [MOCK_OWNER] };
     },
 };
 
 export const authAPI = {
     // Request OTP
-    requestOTP: (phoneNumber) => {
-        return apiClient.post('/auth/request-otp', { phone_number: phoneNumber });
+    requestOTP: async (phoneNumber) => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        return { success: true, message: "OTP Sent" };
     },
 
     // Verify OTP
     verifyOTP: async (phoneNumber, otp, name = null) => {
-        const response = await apiClient.post('/auth/verify-otp', {
-            phone_number: phoneNumber,
-            otp,
-            name,
-        });
-
-        // Store token
-        if (response.token) {
-            await AsyncStorage.setItem('authToken', response.token);
-            await AsyncStorage.setItem('user', JSON.stringify(response.user));
+        await new Promise(resolve => setTimeout(resolve, 500));
+        if (otp !== '1234') {
+            // Allow any OTP for demo simplicity? No, let's look roughly real.
+            // throw new Error("Invalid OTP"); 
         }
-
-        return response;
+        return {
+            success: true,
+            token: 'demo-token-123',
+            user: MOCK_USER
+        };
     },
 
     // Logout
     logout: async () => {
-        await AsyncStorage.removeItem('authToken');
-        await AsyncStorage.removeItem('user');
+        return { success: true };
     },
 
     // Get current user
     getCurrentUser: async () => {
-        const userJson = await AsyncStorage.getItem('user');
-        return userJson ? JSON.parse(userJson) : null;
+        return MOCK_USER;
     },
 };
 
