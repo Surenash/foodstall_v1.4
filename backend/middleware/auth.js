@@ -49,7 +49,7 @@ async function sendOTP(phoneNumber) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     // TODO: Send OTP via SMS service
-    console.log(`📱 OTP for ${phoneNumber}: ${otp}`);
+    console.log(`📱 [MOCK SMS] OTP for ${phoneNumber}: ${otp}`);
 
     // In development, store in memory (use Redis in production)
     if (!global.otpStore) {
@@ -61,7 +61,7 @@ async function sendOTP(phoneNumber) {
         expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
     };
 
-    return { success: true, message: 'OTP sent successfully' };
+    return { success: true, message: 'OTP sent successfully', _dev_otp: otp }; // _dev_otp included for easy testing
 }
 
 /**

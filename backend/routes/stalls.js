@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../config/database');
 const { calculateAggregatedScore, responsesToTags } = require('../utils/hygieneScore');
+const { body, validationResult } = require('express-validator');
 
 /**
  * GET /api/v1/stalls/nearby
@@ -29,8 +30,9 @@ router.get('/nearby', async (req, res) => {
             });
         }
 
-        // Build query using Haversine formula for distance calculation
-        // Works with regular latitude/longitude columns (no PostGIS needed)
+        const { cuisine, status, rating } = req.query;
+
+        // Build query using PostGIS ST_DWithin and ST_Distance for accurate geospatial queries
         let sqlQuery = `
       SELECT 
         s.id,
@@ -42,43 +44,43 @@ router.get('/nearby', async (req, res) => {
         s.price_range,
         s.dietary_tags,
         s.hygiene_badges,
-        s.latitude,
-        s.longitude,
-        (
-          6371000 * acos(
-            cos(radians($1)) * cos(radians(s.latitude)) *
-            cos(radians(s.longitude) - radians($2)) +
-            sin(radians($1)) * sin(radians(s.latitude))
-          )
-        ) as distance_meters,
+        ST_Y(s.location::geometry) as latitude,
+        ST_X(s.location::geometry) as longitude,
+        ST_Distance(s.location, ST_GeogFromText('POINT(' || $1 || ' ' || $2 || ')')) as distance_meters,
         (
           SELECT COUNT(*) 
           FROM reviews r 
           WHERE r.stall_id = s.id
         ) as review_count,
         (
-          SELECT COALESCE(AVG(rating), 0)
+          SELECT COALESCE(AVG(r.rating), 0)
           FROM reviews r
           WHERE r.stall_id = s.id
         ) as avg_rating
       FROM stalls s
-      WHERE (
-        6371000 * acos(
-          cos(radians($1)) * cos(radians(s.latitude)) *
-          cos(radians(s.longitude) - radians($2)) +
-          sin(radians($1)) * sin(radians(s.latitude))
-        )
-      ) <= $3
+      WHERE ST_DWithin(s.location, ST_GeogFromText('POINT(' || $1 || ' ' || $2 || ')'), $3)
     `;
 
+        const queryParams = [longitude, latitude, searchRadius];
+        let paramCount = 3;
+
         // Filter by open status if requested
-        if (open_only === 'true') {
-            sqlQuery += ' AND s.is_open = true';
+        if (open_only === 'true' || status === 'Open') {
+            sqlQuery += ` AND s.is_open = true`;
+        } else if (status === 'Closed') {
+            sqlQuery += ` AND s.is_open = false`;
+        }
+
+        // Filter by cuisine
+        if (cuisine && cuisine !== 'All') {
+            paramCount++;
+            sqlQuery += ` AND s.cuisine_type = $${paramCount}`;
+            queryParams.push(cuisine);
         }
 
         sqlQuery += ' ORDER BY distance_meters ASC LIMIT 50';
 
-        const result = await query(sqlQuery, [latitude, longitude, searchRadius]);
+        const result = await query(sqlQuery, queryParams);
 
         // Calculate hygiene scores for each stall
         const stallsWithHygiene = await Promise.all(
@@ -99,16 +101,71 @@ router.get('/nearby', async (req, res) => {
             })
         );
 
+        // Filter by rating if requested (done post-query since it relies on subquery results)
+        let filteredStalls = stallsWithHygiene;
+        if (rating && !isNaN(parseFloat(rating))) {
+             const minRating = parseFloat(rating);
+             filteredStalls = stallsWithHygiene.filter(stall => parseFloat(stall.avg_rating) >= minRating);
+        }
+
         res.json({
             success: true,
-            count: stallsWithHygiene.length,
-            stalls: stallsWithHygiene,
+            count: filteredStalls.length,
+            stalls: filteredStalls,
         });
 
     } catch (error) {
         console.error('Error fetching nearby stalls:', error);
         res.status(500).json({
             error: 'Failed to fetch nearby stalls',
+            message: error.message
+        });
+    }
+});
+
+/**
+ * GET /api/v1/stalls/:id/reviews
+ * Get reviews for a specific stall with pagination
+ */
+router.get('/:id/reviews', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { page = 1, limit = 10 } = req.query;
+
+        const offset = (page - 1) * limit;
+
+        const result = await query(
+            `SELECT
+                r.*,
+                u.name as reviewer_name,
+                u.profile_photo as reviewer_photo
+             FROM reviews r
+             JOIN users u ON r.user_id = u.id
+             WHERE r.stall_id = $1
+             ORDER BY r.created_at DESC
+             LIMIT $2 OFFSET $3`,
+            [id, limit, offset]
+        );
+
+        const countResult = await query(
+            `SELECT COUNT(*) FROM reviews WHERE stall_id = $1`,
+            [id]
+        );
+        const total = parseInt(countResult.rows[0].count);
+
+        res.json({
+            success: true,
+            count: result.rows.length,
+            total,
+            page: parseInt(page),
+            totalPages: Math.ceil(total / limit),
+            reviews: result.rows
+        });
+
+    } catch (error) {
+        console.error('Error fetching stall reviews:', error);
+        res.status(500).json({
+            error: 'Failed to fetch stall reviews',
             message: error.message
         });
     }
@@ -186,8 +243,19 @@ router.get('/:id', async (req, res) => {
  * Submit a review for a stall
  * Body: { stall_id, user_id, rating, hygiene_score, hygiene_responses, comment }
  */
-router.post('/reviews', async (req, res) => {
+router.post('/reviews', [
+    body('stall_id').isUUID().withMessage('Valid stall_id is required'),
+    body('user_id').isUUID().withMessage('Valid user_id is required'),
+    body('rating').isInt({ min: 1, max: 5 }).withMessage('Rating must be between 1 and 5'),
+    body('hygiene_score').isInt({ min: 1, max: 5 }).withMessage('Hygiene score must be between 1 and 5'),
+    body('comment').optional().isString().trim().escape(),
+], async (req, res) => {
     try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ error: 'Validation failed', details: errors.array() });
+        }
+
         const {
             stall_id,
             user_id,
@@ -196,19 +264,6 @@ router.post('/reviews', async (req, res) => {
             hygiene_responses,
             comment
         } = req.body;
-
-        // Validation
-        if (!stall_id || !user_id || !rating || !hygiene_score) {
-            return res.status(400).json({
-                error: 'Missing required fields: stall_id, user_id, rating, hygiene_score'
-            });
-        }
-
-        if (rating < 1 || rating > 5 || hygiene_score < 1 || hygiene_score > 5) {
-            return res.status(400).json({
-                error: 'Ratings must be between 1 and 5'
-            });
-        }
 
         // Convert hygiene responses to tags
         const hygieneTags = responsesToTags(hygiene_responses || {});
@@ -249,6 +304,45 @@ router.post('/reviews', async (req, res) => {
 
         res.status(500).json({
             error: 'Failed to submit review',
+            message: error.message
+        });
+    }
+});
+
+
+/**
+ * GET /api/v1/stalls/collections/featured
+ * Get featured collections of stalls
+ */
+router.get('/collections/featured', async (req, res) => {
+    try {
+        // Fetch top rated open stalls
+        const topRatedResult = await query(`
+            SELECT s.name
+            FROM stalls s
+            WHERE s.is_open = true
+            ORDER BY (SELECT COALESCE(AVG(rating), 0) FROM reviews WHERE stall_id = s.id) DESC
+            LIMIT 5
+        `);
+
+        const topRatedNames = topRatedResult.rows.map(r => r.name);
+
+        const collections = [
+            {
+                title: "Top Rated Open Now",
+                description: "The highest rated food stalls currently open.",
+                stallNames: topRatedNames
+            }
+        ];
+
+        res.json({
+            success: true,
+            collections
+        });
+    } catch (error) {
+        console.error('Error fetching featured collections:', error);
+        res.status(500).json({
+            error: 'Failed to fetch featured collections',
             message: error.message
         });
     }

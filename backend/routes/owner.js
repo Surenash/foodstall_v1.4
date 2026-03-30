@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const { query } = require('../config/database');
+const { body, validationResult } = require('express-validator');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -33,21 +34,28 @@ const upload = multer({
     }
 });
 
+const { authenticateToken } = require('../middleware/auth');
+
 /**
  * POST /api/v1/owner/status
  * Update stall open/closed status and location
  * Body: { stall_id, owner_id, is_open, location: { lat, long } }
  */
-router.post('/status', async (req, res) => {
+router.post('/status', authenticateToken, [
+    body('stall_id').isUUID().withMessage('Valid stall_id is required'),
+    body('owner_id').isUUID().withMessage('Valid owner_id is required'),
+    body('is_open').isBoolean().withMessage('is_open must be a boolean'),
+    body('location').optional().isObject(),
+    body('location.lat').optional().isFloat(),
+    body('location.long').optional().isFloat(),
+], async (req, res) => {
     try {
-        const { stall_id, owner_id, is_open, location } = req.body;
-
-        // Validation
-        if (!stall_id || !owner_id || is_open === undefined) {
-            return res.status(400).json({
-                error: 'Missing required fields: stall_id, owner_id, is_open'
-            });
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ error: 'Validation failed', details: errors.array() });
         }
+
+        const { stall_id, owner_id, is_open, location } = req.body;
 
         // Verify ownership
         const ownerCheck = await query(
@@ -68,8 +76,7 @@ router.post('/status', async (req, res) => {
 
         // Update location if provided (for mobile carts)
         if (location && location.lat && location.long) {
-            paramCount++;
-            updateQuery += `, location = ST_GeogFromText('POINT(' || $${paramCount} || ' ' || $${paramCount + 1} || ')')`;
+            updateQuery += `, location = ST_GeogFromText('POINT(' || $2::text || ' ' || $3::text || ')')`;
             params.push(location.long, location.lat);
             paramCount += 2;
         }
@@ -86,6 +93,18 @@ router.post('/status', async (req, res) => {
                 is_open,
                 last_status_update: result.rows[0].last_status_update,
             });
+
+            // Also emit location update if provided, useful for PushCartRadar
+            if (location && location.lat && location.long) {
+                req.app.get('io').emit('stall_location_update', {
+                    stall_id,
+                    location: {
+                        latitude: location.lat,
+                        longitude: location.long
+                    },
+                    last_status_update: result.rows[0].last_status_update,
+                });
+            }
         }
 
         res.json({
@@ -108,15 +127,18 @@ router.post('/status', async (req, res) => {
  * Update stall menu
  * Body: { stall_id, owner_id, menu_text }
  */
-router.put('/menu', async (req, res) => {
+router.put('/menu', authenticateToken, [
+    body('stall_id').isUUID().withMessage('Valid stall_id is required'),
+    body('owner_id').isUUID().withMessage('Valid owner_id is required'),
+    body('menu_text').isString().notEmpty().withMessage('menu_text is required').trim().escape()
+], async (req, res) => {
     try {
-        const { stall_id, owner_id, menu_text } = req.body;
-
-        if (!stall_id || !owner_id || !menu_text) {
-            return res.status(400).json({
-                error: 'Missing required fields: stall_id, owner_id, menu_text'
-            });
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ error: 'Validation failed', details: errors.array() });
         }
+
+        const { stall_id, owner_id, menu_text } = req.body;
 
         // Verify ownership
         const ownerCheck = await query(
@@ -160,7 +182,7 @@ router.put('/menu', async (req, res) => {
  * Body: multipart/form-data with 'photo' field
  * Fields: stall_id, owner_id, photo_type (fssai|setup|other)
  */
-router.post('/hygiene-proof', upload.single('photo'), async (req, res) => {
+router.post('/hygiene-proof', authenticateToken, upload.single('photo'), async (req, res) => {
     try {
         const { stall_id, owner_id, photo_type = 'other' } = req.body;
 
@@ -206,8 +228,9 @@ router.post('/hygiene-proof', upload.single('photo'), async (req, res) => {
         currentBadges.hygiene_photos.push(photoData);
 
         // Mark as FSSAI verified if photo type is fssai
+        // Normally, this should go to a moderation queue. Marking as pending for realism.
         if (photo_type === 'fssai') {
-            currentBadges.fssai_verified = true;
+            currentBadges.fssai_verified = 'pending';
         }
 
         // Update database
@@ -239,7 +262,7 @@ router.post('/hygiene-proof', upload.single('photo'), async (req, res) => {
  * GET /api/v1/owner/stalls/:owner_id
  * Get all stalls owned by a specific owner
  */
-router.get('/stalls/:owner_id', async (req, res) => {
+router.get('/stalls/:owner_id', authenticateToken, async (req, res) => {
     try {
         const { owner_id } = req.params;
 
