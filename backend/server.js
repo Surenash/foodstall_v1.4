@@ -108,6 +108,7 @@ app.post('/api/v1/auth/verify-otp', async (req, res) => {
         );
 
         let user;
+        let isNewUser = false;
         if (userResult.rows.length === 0) {
             // Create new user
             const newUserResult = await query(
@@ -115,6 +116,7 @@ app.post('/api/v1/auth/verify-otp', async (req, res) => {
                 [phone_number, name || null]
             );
             user = newUserResult.rows[0];
+            isNewUser = true;
         } else {
             user = userResult.rows[0];
         }
@@ -125,6 +127,7 @@ app.post('/api/v1/auth/verify-otp', async (req, res) => {
         res.json({
             success: true,
             message: 'Login successful',
+            isNewUser,
             user,
             token,
         });
@@ -132,6 +135,66 @@ app.post('/api/v1/auth/verify-otp', async (req, res) => {
     } catch (error) {
         console.error('Error verifying OTP:', error);
         res.status(500).json({ error: 'Failed to verify OTP' });
+    }
+});
+
+// Registration Route
+app.post('/api/v1/auth/register', async (req, res) => {
+    try {
+        const { phone_number, name, email, preferences } = req.body;
+
+        if (!phone_number) {
+            return res.status(400).json({ error: 'Phone number is required' });
+        }
+
+        // Verify OTP logic added here to make it secure
+        const { otp } = req.body;
+        if (!otp) {
+            return res.status(400).json({ error: 'OTP is required to register' });
+        }
+
+        const verification = verifyOTP(phone_number, otp);
+
+        if (!verification.success) {
+            return res.status(400).json({ error: verification.message });
+        }
+
+        // Check if user already exists
+        const userResult = await query(
+            'SELECT * FROM users WHERE phone_number = $1',
+            [phone_number]
+        );
+
+        let user;
+        if (userResult.rows.length > 0) {
+            // They meant to login, return token
+            user = userResult.rows[0];
+        } else {
+            // Create new user
+            const newUserResult = await query(
+                `INSERT INTO users (phone_number, name, email, preferences)
+                 VALUES ($1, $2, $3, $4) RETURNING *`,
+                [
+                    phone_number,
+                    name || null,
+                    email || null,
+                    preferences ? JSON.stringify(preferences) : '{"dietary": "veg", "spice_tolerance": "medium", "language": "en"}'
+                ]
+            );
+            user = newUserResult.rows[0];
+        }
+
+        const token = generateToken(user);
+
+        res.status(201).json({
+            success: true,
+            message: 'User registered successfully',
+            user,
+            token,
+        });
+    } catch (error) {
+        console.error('Error registering user:', error);
+        res.status(500).json({ error: 'Failed to register user' });
     }
 });
 
@@ -173,6 +236,13 @@ io.on('connection', (socket) => {
         console.log('Status change:', data);
         // Broadcast to all clients
         io.emit('stall_status_update', data);
+    });
+
+    // Owner location update (for PushCartRadar)
+    socket.on('owner_location_change', (data) => {
+        console.log('Location change:', data);
+        // Broadcast to all clients
+        io.emit('stall_location_update', data);
     });
 
     socket.on('disconnect', () => {

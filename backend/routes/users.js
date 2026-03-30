@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const { query } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
+const { body, validationResult } = require('express-validator');
 
 // Configure multer for profile photo uploads
 const storage = multer.diskStorage({
@@ -316,8 +317,17 @@ router.get('/:id/reviews', async (req, res) => {
  * PUT /api/v1/users/:id/reviews/:review_id
  * Edit a review
  */
-router.put('/:id/reviews/:review_id', async (req, res) => {
+router.put('/:id/reviews/:review_id', [
+    body('rating').optional().isInt({ min: 1, max: 5 }),
+    body('hygiene_score').optional().isInt({ min: 1, max: 5 }),
+    body('comment').optional().isString().trim().escape()
+], async (req, res) => {
     try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ error: 'Validation failed', details: errors.array() });
+        }
+
         const { id, review_id } = req.params;
         const { rating, hygiene_score, comment, hygiene_responses } = req.body;
 
@@ -513,22 +523,19 @@ router.put('/:id/notifications/read-all', async (req, res) => {
  * POST /api/v1/reports
  * Submit a stall report or feedback
  */
-router.post('/reports', async (req, res) => {
+router.post('/reports', [
+    body('user_id').isUUID().withMessage('Valid user_id is required'),
+    body('stall_id').optional().isUUID().withMessage('stall_id must be a valid UUID'),
+    body('type').isIn(['incorrect_info', 'closed_permanently', 'hygiene_issue', 'new_stall_suggestion', 'other']).withMessage('Invalid report type'),
+    body('description').isString().notEmpty().withMessage('Description is required').trim().escape()
+], async (req, res) => {
     try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ error: 'Validation failed', details: errors.array() });
+        }
+
         const { user_id, stall_id, type, description } = req.body;
-
-        if (!user_id || !type || !description) {
-            return res.status(400).json({
-                error: 'Missing required fields: user_id, type, description'
-            });
-        }
-
-        const validTypes = ['incorrect_info', 'closed_permanently', 'hygiene_issue', 'new_stall_suggestion', 'other'];
-        if (!validTypes.includes(type)) {
-            return res.status(400).json({
-                error: `Invalid report type. Must be one of: ${validTypes.join(', ')}`
-            });
-        }
 
         const result = await query(
             `INSERT INTO reports (user_id, stall_id, type, description)

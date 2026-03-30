@@ -11,28 +11,34 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- USERS TABLE
 -- Stores user profiles with phone authentication
 -- =====================================================
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     phone_number VARCHAR(15) UNIQUE NOT NULL,
     name VARCHAR(100),
     email VARCHAR(255),
+    profile_photo VARCHAR(255),
     preferences JSONB DEFAULT '{
         "dietary": "veg",
         "spice_tolerance": "medium",
         "language": "en"
+    }'::jsonb,
+    notification_preferences JSONB DEFAULT '{
+        "push": true,
+        "email": false,
+        "sms": true
     }'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Index for fast phone number lookups (used in OTP authentication)
-CREATE INDEX idx_users_phone ON users(phone_number);
+CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone_number);
 
 -- =====================================================
 -- STALLS TABLE
 -- Core stall information with geospatial data
 -- =====================================================
-CREATE TABLE stalls (
+CREATE TABLE IF NOT EXISTS stalls (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(200) NOT NULL,
@@ -70,25 +76,25 @@ CREATE TABLE stalls (
 );
 
 -- CRITICAL: Spatial index for fast "nearby" queries
-CREATE INDEX idx_stalls_location ON stalls USING GIST(location);
+CREATE INDEX IF NOT EXISTS idx_stalls_location ON stalls USING GIST(location);
 
 -- Index for filtering by open status
-CREATE INDEX idx_stalls_is_open ON stalls(is_open);
+CREATE INDEX IF NOT EXISTS idx_stalls_is_open ON stalls(is_open);
 
 -- Index for owner lookups
-CREATE INDEX idx_stalls_owner ON stalls(owner_id);
+CREATE INDEX IF NOT EXISTS idx_stalls_owner ON stalls(owner_id);
 
 -- Index for cuisine search
-CREATE INDEX idx_stalls_cuisine ON stalls(cuisine_type);
+CREATE INDEX IF NOT EXISTS idx_stalls_cuisine ON stalls(cuisine_type);
 
 -- GIN index for dietary tags array search
-CREATE INDEX idx_stalls_dietary_tags ON stalls USING GIN(dietary_tags);
+CREATE INDEX IF NOT EXISTS idx_stalls_dietary_tags ON stalls USING GIN(dietary_tags);
 
 -- =====================================================
 -- REVIEWS TABLE
 -- User reviews with hygiene-specific feedback
 -- =====================================================
-CREATE TABLE reviews (
+CREATE TABLE IF NOT EXISTS reviews (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     stall_id UUID NOT NULL REFERENCES stalls(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -121,13 +127,65 @@ CREATE TABLE reviews (
 );
 
 -- Index for fetching reviews by stall
-CREATE INDEX idx_reviews_stall ON reviews(stall_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_stall ON reviews(stall_id);
 
 -- Index for user's review history
-CREATE INDEX idx_reviews_user ON reviews(user_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_user ON reviews(user_id);
 
 -- GIN index for hygiene tags queries
-CREATE INDEX idx_reviews_hygiene_tags ON reviews USING GIN(hygiene_tags);
+CREATE INDEX IF NOT EXISTS idx_reviews_hygiene_tags ON reviews USING GIN(hygiene_tags);
+
+
+-- =====================================================
+-- FAVORITES TABLE
+-- Stores user's favorite stalls
+-- =====================================================
+CREATE TABLE IF NOT EXISTS favorites (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    stall_id UUID NOT NULL REFERENCES stalls(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, stall_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);
+CREATE INDEX IF NOT EXISTS idx_favorites_stall ON favorites(stall_id);
+
+
+-- =====================================================
+-- NOTIFICATIONS TABLE
+-- Stores user notifications
+-- =====================================================
+CREATE TABLE IF NOT EXISTS notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(200) NOT NULL,
+    message TEXT NOT NULL,
+    type VARCHAR(50) NOT NULL, -- e.g., 'favorite_open', 'system'
+    read BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id) WHERE read = false;
+
+
+-- =====================================================
+-- REPORTS TABLE
+-- Stores stall feedback and reporting
+-- =====================================================
+CREATE TABLE IF NOT EXISTS reports (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    stall_id UUID REFERENCES stalls(id) ON DELETE SET NULL,
+    type VARCHAR(50) NOT NULL, -- e.g., 'incorrect_info', 'closed_permanently', 'hygiene_issue'
+    description TEXT NOT NULL,
+    status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'reviewed', 'resolved'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_reports_stall ON reports(stall_id);
+
 
 -- =====================================================
 -- HELPER FUNCTIONS
@@ -177,15 +235,49 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger to auto-update timestamp when is_open changes
+DROP TRIGGER IF EXISTS trigger_update_status_timestamp ON stalls;
 CREATE TRIGGER trigger_update_status_timestamp
 BEFORE UPDATE OF is_open ON stalls
 FOR EACH ROW
 WHEN (OLD.is_open IS DISTINCT FROM NEW.is_open)
 EXECUTE FUNCTION update_status_timestamp();
 
+-- Trigger for users updated_at
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
+CREATE TRIGGER update_users_updated_at
+BEFORE UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger for stalls updated_at
+DROP TRIGGER IF EXISTS update_stalls_updated_at ON stalls;
+CREATE TRIGGER update_stalls_updated_at
+BEFORE UPDATE ON stalls
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger for reviews updated_at
+DROP TRIGGER IF EXISTS update_reviews_updated_at ON reviews;
+CREATE TRIGGER update_reviews_updated_at
+BEFORE UPDATE ON reviews
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+
 -- =====================================================
 -- SEED DATA (for testing)
 -- =====================================================
+
+-- Clear existing data if re-running
+TRUNCATE TABLE users CASCADE;
 
 -- Insert sample users
 INSERT INTO users (phone_number, name, preferences) VALUES
@@ -244,7 +336,7 @@ DO $$
 BEGIN
     RAISE NOTICE 'Database schema created successfully!';
     RAISE NOTICE 'PostGIS version: %', PostGIS_Version();
-    RAISE NOTICE 'Total tables created: 3 (users, stalls, reviews)';
+    RAISE NOTICE 'Total tables created: 6 (users, stalls, reviews, favorites, notifications, reports)';
     RAISE NOTICE 'Sample data: % users, % stalls, % reviews', 
         (SELECT COUNT(*) FROM users),
         (SELECT COUNT(*) FROM stalls),
